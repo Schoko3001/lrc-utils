@@ -1,0 +1,50 @@
+{
+  "editor.semanticHighlighting.enabled": false,
+  "editor.tokenColorCustomizations": {
+    "textMateRules": [
+      // dataTypes
+      {
+        "scope": "storage.type.built-in.primitive.c",
+        "settings": { "foreground": "#2fbfd8" }
+      },
+      {
+        "scope": "entity.name.type",
+        "settings": { "foreground": "#2fbfd8" }
+      },
+
+      // functions
+      {
+        "scope": "entity.name.function.c",
+        "settings": { "foreground": "#ff2f2f" }
+      },
+
+      // macros
+      {
+        "scope": "entity.name.function.preprocessor.c",
+        "settings": { "foreground": "#8b8b8b" }
+      },
+
+      // values
+      {
+        "scope": "constant.numeric.decimal.c",
+        "settings": { "foreground": "#7F8D9F" }
+      },
+
+      // comments
+      {
+        "scope": "comment",
+        "settings": { "foreground": "#44628b" }
+      },
+      {
+        "scope": "punctuation.definition.comment.c",
+        "settings": { "foreground": "#44628b" }
+      },
+
+      // keywords
+      {
+        "scope": "keyword.control.c",
+        "settings": { "foreground": "#ff9650" }
+      }
+    ]
+  },
+}
