@@ -1,126 +1,109 @@
 #include <stdint.h>
 /* !!! IT IS ASSUMED THAT <stdlib> IS INCLUDED SOMEWHERE !!! */
 
-/*
-*	dynamic freelist header
-*
-*	- The freelist doubles in size if full
-*	  This requires a realloc which can be quite slow
-*	- No safety checks
-*	- There is an empty Slot at index 0	  
-*/
 
-/* Extra:
-*	
-*	A FREELIST_UINT_SIZE can be defined (8, 16, 32, 64)
-*	Usecase:
-*		By default a slot takes up atleast "sizeof(size_t)" bytes
-*		For a list with very small members, this can waste memory
-*		"#define FREELIST_UINT_SIZE 16" reduces the minimum slot size
-*
-*	Drawback:
-*		The user has to watch out for an integer overflow of the index
-*		Rule: "(n_memb + 1) * memb_size" has to be smaller than the uint limit
-*/
+/* FUNCTIONS:
+ *	void* freelist_create(size_t nmeb, size_t memb_size);
+ *	void  freelist_destroy(void* list);
+ *
+ *	void* freelist_addSlot(void* list, size_t memb_size);
+ *	void  freelist_freeSlot(void* list, void* slot_p) 
+ */
 
 
-// I did not include stdlib.h to keep the header size at a minimum
+/*	This freelist grows dynamically
+ *	This freelist does not shrink
+ *
+ *	This freelist does not use realloc but allocates extra chunks
+ *	-> no continous buffer
+ *
+ *	This freelist uses void* instead of an index
+ *	-> the smalles size of a slot is sizeof(void*)
+ */
+
+
 void* malloc(size_t size);
-void* realloc(void *ptr, size_t new_size);
+void free(void *ptr);
 
-
-// FREELIST_UINT_SIZE
-#if !defined(FREELIST_UINT_SIZE)
-typedef size_t _fl_uint;
-#elif FREELIST_UINT_SIZE == 64
-typedef uint64_t _fl_uint;
-#elif FREELIST_UINT_SIZE == 32
-typedef uint32_t _fl_uint;
-#elif FREELIST_UINT_SIZE == 16
-typedef uint16_t _fl_uint;
-#elif FREELIST_UINT_SIZE == 8
-typedef uint8_t _fl_uint;
-#else
-#error Invalid FREELIST_UINT_SIZE definition
-#endif
-
-
+// rounds up to stride % 8 == 0
 #define _FL_STRIDE(stride) \
-	((stride) > sizeof(_fl_uint) ? (stride) : sizeof(_fl_uint))
+	(((stride) + 7) & ~7)
 
 
-typedef struct _freelist_dyn {
-	char* buffer;
-	_fl_uint free_head;
-	_fl_uint size;
-} _fl_dyn;
+typedef struct _freelist{
+	void* free_head;
+	void* tail_chunk;
+	size_t tail_used;
+	size_t tail_size;
+	size_t stride;
+} _fl;
 
-// stride might be too small, make check and confirm
-static inline void* freelist_dyn_create(size_t nmemb, size_t stride) {
-	stride = _FL_STRIDE(stride);
-	_fl_dyn* list = malloc(sizeof(_fl_dyn));
-	
-	list->free_head = stride;
-	list->size = (nmemb + 1) * stride;
-	list->buffer = malloc(list->size);
+/*  Datastructure:
+ *	The first sizeof(void*) bytes are not used as storage
+ *	They contain a pointer to a previous chunk
+ *	This is done for freelist_destroy(void* ptr)
+ */
 
-	/* init slots */
-	_fl_uint i = stride;
-	while (i < list->size) {
-		_fl_uint next = i + stride;
-		*(_fl_uint *)(list->buffer + i) = next;
-		i = next;
-	}
 
-	*(_fl_uint*)(list->buffer + i - stride) = 0;
+
+// creates the dymamic freelist and returns its adress that is used for identification
+static inline void* freelist_create(size_t nmemb, size_t memb_size) {
+	_fl* list = malloc(sizeof(_fl));
+	list->stride = _FL_STRIDE(memb_size);
+
+	list->tail_size = nmemb * list->stride + sizeof(char*);
+	list->tail_chunk = malloc(list->tail_size);
+
+	list->free_head = NULL;
+	list->tail_used = 0;
+
+	// first chunk (prev does not exist)
+	*(void**)list->tail_chunk = NULL;
 
 	return list;
 }
-static inline void freelist_dyn_delete(_fl_dyn* list) {
-	free(list->buffer);
+static inline void freelist_destroy(void* ptr) {
+	if (ptr == NULL) return;
+	_fl* list = ptr;
+
+	while (list->tail_chunk != NULL) {
+		void* tmp = *(void**)list->tail_chunk;
+		free(list->tail_chunk);
+		list->tail_chunk = tmp;
+	}
+
 	free(list);
 }
 
-static inline void* _freelist_dyn_addSlot_impl(_fl_dyn* list, _fl_uint* index_p, _fl_uint stride) {
-	void* slot;
+// returns void* to an unused slot
+// might be filled with garbage values
+static inline void* freelist_addSlot(void* ptr) {
+	_fl* list = ptr;
 
-	/* expand existing list */
-	if (list->free_head == 0) {
-		list->free_head = list->size;
-		list->size = (list->size << 1) - stride;
-		list->buffer = realloc(list->buffer, list->size);
+	if (list->free_head == NULL) {
 
-		/* init new slots */
-		_fl_uint i = list->free_head;
-		while (i < list->size) {
-			_fl_uint next = i + stride;
-			*(_fl_uint *)(list->buffer + i) = next;
-			i = next;
+		/* create new chunk if current full */
+		if (list->tail_used == list->tail_size) {
+			list->tail_size = (list->tail_size << 1) - sizeof(void*);
+
+			void* new_chunk = malloc(list->tail_size);
+			*(void**)new_chunk = list->tail_chunk;
+			list->tail_chunk = new_chunk; 
+			list->tail_used = sizeof(void*);
 		}
 
-		*(_fl_uint*)(list->buffer + i - stride) = 0;
+		void* ret = (char*)list->tail_chunk + list->tail_used;
+		list->tail_used += list->stride;
+		return ret;
 	}
-
-	// lookup free slot
-	*index_p = list->free_head;
-	slot = list->buffer + list->free_head;
-	list->free_head = *(_fl_uint*)slot;
-
-	return (void*)slot;
+	else {
+		void* ret = list->free_head;
+		list->free_head = *(void**)list->free_head;
+		return ret;
+	}
 }
-static inline void* _freelist_dyn_getRaw_impl(_fl_dyn* list, _fl_uint index) {
-	return list->buffer + index;
+static inline void freelist_freeSlot(void* ptr, void* slot_p) {
+	_fl* list = ptr;
+	*(void**)slot_p = list->free_head;
+	list->free_head = slot_p;
 }
-static inline void _freelist_dyn_freeSlot_impl(_fl_dyn* list, _fl_uint index) {
-	*(_fl_uint*)(list->buffer + index) = list->free_head;
-	list->free_head = index;
-}
-
-
-#define freelist_dyn_addSlot(ptr, index_p, stride) \
-	_freelist_dyn_addSlot_impl(ptr, index_p, _FL_STRIDE(stride))
-#define freelist_dyn_getRaw(ptr, index) \
-	_freelist_dyn_getRaw_impl(ptr, index)
-#define freelist_dyn_freeSlot(ptr, index) \
-	_freelist_dyn_freeSlot_impl(ptr, index)
-
