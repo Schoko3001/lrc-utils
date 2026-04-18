@@ -11,44 +11,48 @@
  */
 
 
-/*	This freelist grows dynamically
+/* INFORMATION:
+ *	This freelist grows dynamically
  *	This freelist does not shrink
  *
  *	This freelist does not use realloc but allocates extra chunks
  *	-> no continous buffer
  *
  *	This freelist uses void* instead of an index
- *	-> the smalles size of a slot is sizeof(void*)
+ *	-> the size of a slot is rounded up to a multiple of sizeof(void*)
  */
 
 
 void* malloc(size_t size);
 void free(void *ptr);
 
-// rounds up to stride % 8 == 0
+// rounds up to stride % sizeof(void*) == 0
 #define _FL_STRIDE(stride) \
-	(((stride) + 7) & ~7)
+	(((stride) + sizeof(void*) - 1) & ~(sizeof(void*) - 1))
 
 
-typedef struct _freelist{
+// freelist descriptor
+struct _fl_desc{
 	void* free_head;
 	void* tail_chunk;
 	size_t tail_used;
 	size_t tail_size;
 	size_t stride;
-} _fl;
+};
 
 /*  Datastructure:
  *	The first sizeof(void*) bytes are not used as storage
- *	They contain a pointer to a previous chunk
- *	This is done for freelist_destroy(void* ptr)
+ *	- They contain a pointer to a previous chunk
+ *	- This is done for freelist_destroy(void* ptr)
+ *	
+ *	The rest is the actual array
+ *	- member has the length list->stride
+ *	- no indexes, only pointers
  */
-
-
 
 // creates the dymamic freelist and returns its adress that is used for identification
 static inline void* freelist_create(size_t nmemb, size_t memb_size) {
-	_fl* list = malloc(sizeof(_fl));
+	struct _fl_desc* list = malloc(sizeof(struct _fl_desc));
 	list->stride = _FL_STRIDE(memb_size);
 
 	list->tail_size = nmemb * list->stride + sizeof(char*);
@@ -64,7 +68,7 @@ static inline void* freelist_create(size_t nmemb, size_t memb_size) {
 }
 static inline void freelist_destroy(void* ptr) {
 	if (ptr == NULL) return;
-	_fl* list = ptr;
+	struct _fl_desc* list = ptr;
 
 	while (list->tail_chunk != NULL) {
 		void* tmp = *(void**)list->tail_chunk;
@@ -78,7 +82,7 @@ static inline void freelist_destroy(void* ptr) {
 // returns void* to an unused slot
 // might be filled with garbage values
 static inline void* freelist_addSlot(void* ptr) {
-	_fl* list = ptr;
+	struct _fl_desc* list = ptr;
 
 	if (list->free_head == NULL) {
 
@@ -103,7 +107,7 @@ static inline void* freelist_addSlot(void* ptr) {
 	}
 }
 static inline void freelist_freeSlot(void* ptr, void* slot_p) {
-	_fl* list = ptr;
+	struct _fl_desc* list = ptr;
 	*(void**)slot_p = list->free_head;
 	list->free_head = slot_p;
 }
