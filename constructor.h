@@ -7,13 +7,14 @@
  *	msvc
  */
 
-/* normal function:
+/* APPLICATION:
+ * NORMAL:
  *	void function()
  *	{
  *		// do stuff
  *	}
  *
- * as a constructor:
+ * CONSTRUCTOR:
  *	MAKE_CONSTRUCTOR(function)
  *	{
  *		// do stuff
