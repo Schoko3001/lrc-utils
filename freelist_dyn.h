@@ -26,6 +26,27 @@
 void* malloc(size_t size);
 void free(void *ptr);
 
+/* CUSTOMIZATION:
+ *	_FL_NEW_CHUNK_SIZE(variable)
+ *	-> transformation of buffer size for each new chunk
+ *	!!! sizeof(void*) will be added to the true size !!!
+ *
+ *	_FL_CHUNK_MALLOC(size)
+ *	-> allocation method for memory
+ *	- must return void*
+*/
+
+
+#ifndef _FL_NEW_CHUNK_SIZE
+#define _FL_NEW_CHUNK_SIZE(variable) (variable) = (variable) << 1
+#endif
+
+#ifndef _FL_CHUNK_MALLOC
+#define _FL_CHUNK_MALLOC(size) malloc((size))
+#endif
+
+
+
 // rounds up to stride % sizeof(void*) == 0
 #define _FL_STRIDE(stride) \
 	(((stride) + sizeof(void*) - 1) & ~(sizeof(void*) - 1))
@@ -34,9 +55,9 @@ void free(void *ptr);
 // freelist descriptor
 struct _fl_desc{
 	void* free_head;
-	void* tail_chunk;
-	size_t tail_used;
-	size_t tail_size;
+	void* tailChunk;
+	size_t tailChunk_used;
+	size_t tailChunk_size;
 	size_t stride;
 };
 
@@ -55,14 +76,14 @@ static inline void* freelist_create(size_t nmemb, size_t memb_size) {
 	struct _fl_desc* list = malloc(sizeof(struct _fl_desc));
 	list->stride = _FL_STRIDE(memb_size);
 
-	list->tail_size = nmemb * list->stride + sizeof(char*);
-	list->tail_chunk = malloc(list->tail_size);
+	list->tailChunk_size = nmemb * list->stride + sizeof(char*);
+	list->tailChunk = malloc(list->tailChunk_size);
 
 	list->free_head = NULL;
-	list->tail_used = 0;
+	list->tailChunk_used = 0;
 
 	// first chunk (prev does not exist)
-	*(void**)list->tail_chunk = NULL;
+	*(void**)list->tailChunk = NULL;
 
 	return list;
 }
@@ -70,10 +91,10 @@ static inline void freelist_destroy(void* ptr) {
 	if (ptr == NULL) return;
 	struct _fl_desc* list = ptr;
 
-	while (list->tail_chunk != NULL) {
-		void* tmp = *(void**)list->tail_chunk;
-		free(list->tail_chunk);
-		list->tail_chunk = tmp;
+	while (list->tailChunk != NULL) {
+		void* tmp = *(void**)list->tailChunk;
+		free(list->tailChunk);
+		list->tailChunk = tmp;
 	}
 
 	free(list);
@@ -87,17 +108,19 @@ static inline void* freelist_addSlot(void* ptr) {
 	if (list->free_head == NULL) {
 
 		/* create new chunk if current full */
-		if (list->tail_used == list->tail_size) {
-			list->tail_size = (list->tail_size << 1) - sizeof(void*);
+		if (list->tailChunk_used == list->tailChunk_size) {
+			list->tailChunk_size -= sizeof(void*);
+			_FL_NEW_CHUNK_SIZE(list->tailChunk_size);
+			list->tailChunk_size += sizeof(void*);
 
-			void* new_chunk = malloc(list->tail_size);
-			*(void**)new_chunk = list->tail_chunk;
-			list->tail_chunk = new_chunk; 
-			list->tail_used = sizeof(void*);
+			void* new_chunk = _FL_CHUNK_MALLOC(list->tailChunk_size);
+			*(void**)new_chunk = list->tailChunk;
+			list->tailChunk = new_chunk; 
+			list->tailChunk_used = sizeof(void*);
 		}
 
-		void* ret = (char*)list->tail_chunk + list->tail_used;
-		list->tail_used += list->stride;
+		void* ret = (char*)list->tailChunk + list->tailChunk_used;
+		list->tailChunk_used += list->stride;
 		return ret;
 	}
 	else {
