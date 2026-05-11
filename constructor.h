@@ -1,3 +1,5 @@
+#pragma once
+
 // Constructors run before main()
 
 /* Constructors are not in the c standard

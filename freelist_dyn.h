@@ -1,3 +1,4 @@
+#pragma once
 #include <stdint.h>
 /* !!! IT IS ASSUMED THAT <stdlib> IS INCLUDED SOMEWHERE !!! */
 
