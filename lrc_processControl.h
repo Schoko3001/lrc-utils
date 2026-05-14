@@ -37,7 +37,7 @@ static inline int lrc_processClone() {
 	}
 }
 
-static inline lrc_pid getParentPID() {
+static inline lrc_pid lrc_getParentPID() {
 	DWORD currentPID = GetCurrentProcessId();
 	DWORD parentPID = 0;
 
@@ -61,7 +61,7 @@ static inline lrc_pid getParentPID() {
 	CloseHandle(snapshot);
 }
 
-static inline lrc_pid getPID() {
+static inline lrc_pid lrc_getPID() {
 	return GetCurrentProcessId();
 }
 
