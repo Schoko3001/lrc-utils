@@ -3,19 +3,30 @@
 #include <stdio.h>
 
 
+
+static inline void _lrc_safeStrcpy(char* buffer, const char* source, size_t len) {
+	if (len == 0) return;
+
+	int i = 0;
+	for (;i < len-1 && source[i] != '\0'; i++)
+		buffer[i] = source[i];
+
+	if (source[i] != 0)
+		printf("WARNING: lrc_sharedMemory.h, name too long\n");
+	
+	buffer[i] = '\0';
+}
+
+
 #if defined(_WIN32)
 #include <windows.h>
 
 typedef HANDLE lrc_hndl;
 #define lrc_hndl_invalid INVALID_HANDLE_VALUE
 
-static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, char* name, size_t size) {
-	char full_name[255] = "Global\\";
-	int j = 7;
-	int i = 0;
-	while (i < strlen(name) + 1) {
-		full_name[j++] = name[i++];
-	}
+static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, const char* name, size_t size) {
+	char full_name[MAX_PATH + 7 + 1] = "Global\\";
+	_lrc_safeStrcpy(full_name + 7, name, sizeof(full_name) - 7);
 
 	// create kernel object
 	HANDLE hMap = CreateFileMappingA(
@@ -46,13 +57,9 @@ static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, char* name, size
 	return hMap;
 }
 
-static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, char* name, size_t size) {
-	char full_name[255] = "Global\\";
-	int j = 7;
-	int i = 0;
-	while (i < strlen(name) + 1) {
-		full_name[j++] = name[i++];
-	}
+static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, const char* name, size_t size) {
+	char full_name[MAX_PATH + 7 + 1] = "Global\\";
+	_lrc_safeStrcpy(full_name + 7, name, sizeof(full_name) - 7);
 	
 	// open kernel object
 	HANDLE hMap = OpenFileMappingA(
@@ -80,9 +87,12 @@ static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, char* name, size_t
 	return hMap;
 }
 
-static inline void lrc_sharedMemory_close(void* ptr, char* name, size_t size, lrc_hndl hndl) {
-	UnmapViewOfFile(ptr);
+static inline void lrc_sharedMemory_close(const char* name, lrc_hndl hndl) {
 	CloseHandle(hndl);
+}
+
+static inline void lrc_sharedMemory_unmap(void* ptr, size_t size) {
+	UnmapViewOfFile(ptr);
 }
 
 #elif defined(__APPLE__)
@@ -100,13 +110,9 @@ typedef int lrc_hndl;
 #define lrc_hndl_invalid -1
 
 
-static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, char* name, size_t size) {
-	char full_name[255] = "/";
-	int j = 1;
-	int i = 0;
-	while (i < strlen(name) + 1) {
-		full_name[j++] = name[i++];
-	}
+static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, const char* name, size_t size) {
+	char full_name[NAME_MAX + 1 + 1] = "/";
+	_lrc_safeStrcpy(full_name + 1, name, sizeof(full_name) - 1);
 
 
 	// create kernel object
@@ -138,13 +144,9 @@ static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, char* name, size
 	return fd;
 }
 
-static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, char* name, size_t size) {
-	char full_name[255] = "/";
-	int j = 1;
-	int i = 0;
-	while (i < strlen(name) + 1) {
-		full_name[j++] = name[i++];
-	}
+static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, const char* name, size_t size) {
+	char full_name[NAME_MAX + 1 + 1] = "/";
+	_lrc_safeStrcpy(full_name + 1, name, sizeof(full_name) - 1);
 
 	// open kernel object
 	int fd = shm_open(full_name, O_RDWR, 0666);
@@ -170,16 +172,16 @@ static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, char* name, size_t
 	return fd;
 }
 
-static inline void lrc_sharedMemory_close(void* ptr, char* name, size_t size, lrc_hndl hndl) {
-	char full_name[255] = "/";
-	int j = 1;
-	int i = 0;
-	while (i < strlen(name) + 1) {
-		full_name[j++] = name[i++];
-	}
-	shm_unlink(full_name)
-	munmap(ptr, size);
+static inline void lrc_sharedMemory_close(const char* name, lrc_hndl hndl) {
+	char full_name[NAME_MAX + 1 + 1] = "/";
+	_lrc_safeStrcpy(full_name + 1, name, sizeof(full_name) - 1);
+
+	shm_unlink(full_name);
 	close(hndl);
+}
+
+static inline void lrc_sharedMemory_unmap(void* ptr, size_t size) {
+	munmap(ptr, size);
 }
 
 #else
