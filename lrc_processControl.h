@@ -8,6 +8,21 @@
 
 #define lrc_pid DWORD
 
+static inline void _lrc_safeStrcpy(char* buffer, const char* source, size_t len) {
+	if (len == 0) return;
+
+	int i = 0;
+	for (;i < len-1 && source[i] != '\0'; i++)
+		buffer[i] = source[i];
+
+	if (source[i] != 0)
+		printf("WARNING: lrc_sharedMemory.h, name too long\n");
+	
+	buffer[i] = '\0';
+}
+
+
+/* process creation */
 static inline int lrc_processClone() {
 	char path[MAX_PATH];
 
@@ -37,6 +52,7 @@ static inline int lrc_processClone() {
 	}
 }
 
+/* process id */
 static inline lrc_pid lrc_getParentPID() {
 	DWORD currentPID = GetCurrentProcessId();
 	DWORD parentPID = 0;
@@ -60,9 +76,31 @@ static inline lrc_pid lrc_getParentPID() {
 
 	CloseHandle(snapshot);
 }
-
 static inline lrc_pid lrc_getPID() {
 	return GetCurrentProcessId();
+}
+
+/* environmental variables */
+static inline void lrc_envVariableSet(
+	const char* var_name, 
+	const char* str
+) {
+	SetEnvironmentVariableA(
+		var_name,
+		str
+	);
+}
+static inline size_t lrc_envVariableGet(
+	const char* var_name, 
+	char* buffer, 
+	size_t buffer_size
+) {
+	DWORD len = GetEnvironmentVariableA(
+		var_name,
+		buffer,
+		buffer_size
+	);
+	return len;
 }
 
 
@@ -109,6 +147,35 @@ static inline lrc_pid lrc_getParentPID() {
 
 static inline lrc_pid lrc_getPID() {
 	return getpid();
+}
+
+/* environmental variables */
+static inline void lrc_envVariableSet(
+	const char* var_name, 
+	const char* str
+) {
+	setenv(var_name, str, 1);
+}
+static inline size_t lrc_envVariableGet(
+	const char* var_name, 
+	char* buffer, 
+	size_t buffer_size
+) {
+	const char* source = getenv(var_name);
+	if (source == NULL) return 0;
+	if (buffer_size == 0) return strlen(source) + 1;
+
+	size_t i = 0;
+	for (;i < buffer_size-1 && source[i] != '\0'; i++)
+		buffer[i] = source[i];
+
+	buffer[i] = '\0';
+	if (source[i] != '\0') {
+		while (source[++i] != '\0');
+		i++;
+	}
+
+	return i;
 }
 
 #else
