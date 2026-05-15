@@ -81,7 +81,7 @@ static inline lrc_pid lrc_getPID() {
 }
 
 /* environmental variables */
-static inline void lrc_envVariableSet(
+static inline void lrc_envVariableWrite(
 	const char* var_name, 
 	const char* str
 ) {
@@ -90,7 +90,10 @@ static inline void lrc_envVariableSet(
 		str
 	);
 }
-static inline size_t lrc_envVariableGet(
+// successful -> returns strlen
+// no variable -> returns 0
+// buffer too small -> returns requried buffersize
+static inline size_t lrc_envVariableRead(
 	const char* var_name, 
 	char* buffer, 
 	size_t buffer_size
@@ -150,13 +153,16 @@ static inline lrc_pid lrc_getPID() {
 }
 
 /* environmental variables */
-static inline void lrc_envVariableSet(
+static inline void lrc_envVariableWrite(
 	const char* var_name, 
 	const char* str
 ) {
 	setenv(var_name, str, 1);
 }
-static inline size_t lrc_envVariableGet(
+// successful -> returns strlen
+// no variable -> returns 0
+// buffer too small -> returns requried buffersize
+static inline size_t lrc_envVariableRead(
 	const char* var_name, 
 	char* buffer, 
 	size_t buffer_size
