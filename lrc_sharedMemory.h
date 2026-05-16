@@ -67,7 +67,6 @@ static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, const char* name, 
 		FALSE,
 		full_name);
 	if (!hMap) {
-		printf("lrc_sharedMemory_create, OpenFileMappingA failed: %lu\n", GetLastError());
 		return lrc_hndl_invalid;
 	}
 
@@ -79,7 +78,7 @@ static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, const char* name, 
 		0,
 		size);
 	if (!*buffer_p) {
-		printf("lrc_sharedMemory_create, MapViewOfFile failed: %lu\n", GetLastError());
+		printf("lrc_sharedMemory_open, MapViewOfFile failed: %lu\n", GetLastError());
 		CloseHandle(hMap);
 		return lrc_hndl_invalid;
 	}
@@ -151,7 +150,6 @@ static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, const char* name, 
 	// open kernel object
 	int fd = shm_open(full_name, O_RDWR, 0666);
 	if (fd == -1) {
-		perror("lrc_sharedMemory_open, shm_open failed");
 		return lrc_hndl_invalid;
 	}
 
