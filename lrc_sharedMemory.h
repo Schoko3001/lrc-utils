@@ -2,8 +2,27 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#if defined(_WIN32)
+	#include <windows.h>
+	typedef HANDLE lrc_hndl;
+	#define lrc_hndl_invalid INVALID_HANDLE_VALUE
+#elif defined(__APPLE__)
+	#error APPLE_IS_NOT_SUPPORTED
+#elif defined(__ANDROID__)
+	#error ANDROID_IS_NOT_SUPPORTED
+#elif defined(__linux__)
+	#include <sys/types.h>
+	#include <sys/mman.h>
+	#include <sys/stat.h>
+	#include <unistd.h>
+	#include <fcntl.h>
+	typedef int lrc_hndl;
+	#define lrc_hndl_invalid -1
+#else
+	#error UNKOWN/MISSING_OS_SPECIFIER
+#endif
 
-
+/* internal header function */
 static inline void _lrc_safeStrcpy(char* buffer, const char* source, size_t len) {
 	if (len == 0) return;
 
@@ -18,13 +37,11 @@ static inline void _lrc_safeStrcpy(char* buffer, const char* source, size_t len)
 }
 
 
-#if defined(_WIN32)
-#include <windows.h>
 
-typedef HANDLE lrc_hndl;
-#define lrc_hndl_invalid INVALID_HANDLE_VALUE
+
 
 static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, const char* name, size_t size) {
+#if defined(_WIN32)
 	char full_name[MAX_PATH + 7 + 1] = "Global\\";
 	_lrc_safeStrcpy(full_name + 7, name, sizeof(full_name) - 7);
 
@@ -55,64 +72,9 @@ static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, const char* name
 	}
 
 	return hMap;
-}
-
-static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, const char* name, size_t size) {
-	char full_name[MAX_PATH + 7 + 1] = "Global\\";
-	_lrc_safeStrcpy(full_name + 7, name, sizeof(full_name) - 7);
-	
-	// open kernel object
-	HANDLE hMap = OpenFileMappingA(
-		FILE_MAP_ALL_ACCESS,
-		FALSE,
-		full_name);
-	if (!hMap) {
-		return lrc_hndl_invalid;
-	}
-
-	// gain access to actual memory
-	*buffer_p = MapViewOfFile(
-		hMap,
-		FILE_MAP_ALL_ACCESS,
-		0,
-		0,
-		size);
-	if (!*buffer_p) {
-		printf("lrc_sharedMemory_open, MapViewOfFile failed: %lu\n", GetLastError());
-		CloseHandle(hMap);
-		return lrc_hndl_invalid;
-	}
-
-	return hMap;
-}
-
-static inline void lrc_sharedMemory_close(const char* name, lrc_hndl hndl) {
-	CloseHandle(hndl);
-}
-
-static inline void lrc_sharedMemory_unmap(void* ptr, size_t size) {
-	UnmapViewOfFile(ptr);
-}
-
-#elif defined(__APPLE__)
-	#error APPLE_IS_NOT_SUPPORTED
-
-#elif defined(__ANDROID__)
-	#error ANDROID_IS_NOT_SUPPORTED
-
-
 #elif defined(__linux__)
-#include <fcntl.h>
-#include <sys/mman.h>
-
-typedef int lrc_hndl;
-#define lrc_hndl_invalid -1
-
-
-static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, const char* name, size_t size) {
 	char full_name[NAME_MAX + 1 + 1] = "/";
 	_lrc_safeStrcpy(full_name + 1, name, sizeof(full_name) - 1);
-
 
 	// create kernel object
 	int fd = shm_open(full_name, O_CREAT | O_RDWR, 0666);
@@ -141,9 +103,40 @@ static inline lrc_hndl lrc_sharedMemory_create(void** buffer_p, const char* name
 	}
 
 	return fd;
+#endif
 }
 
+
+
 static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, const char* name, size_t size) {
+#if defined(_WIN32)
+char full_name[MAX_PATH + 7 + 1] = "Global\\";
+	_lrc_safeStrcpy(full_name + 7, name, sizeof(full_name) - 7);
+	
+	// open kernel object
+	HANDLE hMap = OpenFileMappingA(
+		FILE_MAP_ALL_ACCESS,
+		FALSE,
+		full_name);
+	if (!hMap) {
+		return lrc_hndl_invalid;
+	}
+
+	// gain access to actual memory
+	*buffer_p = MapViewOfFile(
+		hMap,
+		FILE_MAP_ALL_ACCESS,
+		0,
+		0,
+		size);
+	if (!*buffer_p) {
+		printf("lrc_sharedMemory_open, MapViewOfFile failed: %lu\n", GetLastError());
+		CloseHandle(hMap);
+		return lrc_hndl_invalid;
+	}
+
+	return hMap;
+#elif defined(__linux__)
 	char full_name[NAME_MAX + 1 + 1] = "/";
 	_lrc_safeStrcpy(full_name + 1, name, sizeof(full_name) - 1);
 
@@ -168,20 +161,27 @@ static inline lrc_hndl lrc_sharedMemory_open(void** buffer_p, const char* name, 
 	}
 
 	return fd;
+#endif
 }
 
+
 static inline void lrc_sharedMemory_close(const char* name, lrc_hndl hndl) {
+#if defined(_WIN32)
+	CloseHandle(hndl);
+#elif defined(__linux__)
 	char full_name[NAME_MAX + 1 + 1] = "/";
 	_lrc_safeStrcpy(full_name + 1, name, sizeof(full_name) - 1);
 
 	shm_unlink(full_name);
 	close(hndl);
+#endif
 }
+
 
 static inline void lrc_sharedMemory_unmap(void* ptr, size_t size) {
+#if defined(_WIN32)
+	UnmapViewOfFile(ptr);
+#elif defined(__linux__)
 	munmap(ptr, size);
-}
-
-#else
-	#error UNKOWN/MISSING_OS_SPECIFIER
 #endif
+}

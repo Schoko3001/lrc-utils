@@ -1,13 +1,27 @@
 #pragma once
 #include <stdio.h>
 
-
 #if defined(_WIN32)
-#include <windows.h>
-#include <tlhelp32.h>
+	#include <windows.h>
+	#include <tlhelp32.h>
+	#define lrc_pid DWORD
+#elif defined(__APPLE__)
+	#error APPLE_IS_NOT_SUPPORTED
+#elif defined(__ANDROID__)
+	#error ANDROID_IS_NOT_SUPPORTED
+#elif defined(__linux__)
+	#include <spawn.h>
+	#include <unistd.h>
+	#include <sys/types.h>
+	#define lrc_pid pid_t
+	extern char **environ;
+#else
+	#error UNKOWN/MISSING_OS_SPECIFIER
+#endif
 
-#define lrc_pid DWORD
 
+
+/* internal header function */
 static inline void _lrc_safeStrcpy(char* buffer, const char* source, size_t len) {
 	if (len == 0) return;
 
@@ -22,8 +36,9 @@ static inline void _lrc_safeStrcpy(char* buffer, const char* source, size_t len)
 }
 
 
-/* process creation */
+
 static inline int lrc_processClone() {
+#if defined(_WIN32)
 	char path[MAX_PATH];
 
 	GetModuleFileNameA(NULL, path, MAX_PATH);
@@ -50,10 +65,42 @@ static inline int lrc_processClone() {
 	} else {
 		return 1;
 	}
+#elif defined(__linux__)
+	pid_t pid;
+
+	char *argv[] {
+		"/proc/self/exe",
+		NULL
+	};
+
+	if (posix_spawn(
+		&pid,
+		"/proc/self/exe",
+		NULL,
+		NULL,
+		argv,
+		environ)
+	) {
+		return 1;
+	} else {
+		return 0;
+	}
+#endif
 }
 
-/* process id */
+
+static inline lrc_pid lrc_getPID() {
+#if defined(_WIN32)
+	return GetCurrentProcessId();
+#elif defined(__linux__)
+	return getpid();
+#endif
+}
+
+
+
 static inline lrc_pid lrc_getParentPID() {
+#if defined(_WIN32)
 	DWORD currentPID = GetCurrentProcessId();
 	DWORD parentPID = 0;
 
@@ -75,98 +122,26 @@ static inline lrc_pid lrc_getParentPID() {
 	}
 
 	CloseHandle(snapshot);
-}
-static inline lrc_pid lrc_getPID() {
-	return GetCurrentProcessId();
-}
-
-/* environmental variables */
-static inline void lrc_envVariableWrite(
-	const char* var_name, 
-	const char* str
-) {
-	SetEnvironmentVariableA(
-		var_name,
-		str
-	);
-}
-// successful -> returns strlen
-// no variable -> returns 0
-// buffer too small -> returns requried buffersize
-static inline size_t lrc_envVariableRead(
-	const char* var_name, 
-	char* buffer, 
-	size_t buffer_size
-) {
-	DWORD len = GetEnvironmentVariableA(
-		var_name,
-		buffer,
-		buffer_size
-	);
-	return len;
-}
-
-
-#elif defined(__APPLE__)
-	#error APPLE_IS_NOT_SUPPORTED
-
-#elif defined(__ANDROID__)
-	#error ANDROID_IS_NOT_SUPPORTED
-
 #elif defined(__linux__)
-#include <spawn.h>
-#include <unistd.h>
-#include <sys/types.h>
-
-#define lrc_pid pid_t
-
-extern char **environ;
-
-static inline int lrc_processClone() {
-	pid_t pid;
-
-	char *argv[] {
-		"/proc/self/exe",
-		NULL
-	};
-
-	if (posix_spawn(
-		&pid,
-		"/proc/self/exe",
-		NULL,
-		NULL,
-		argv,
-		environ)
-	) {
-		return 1;
-	} else {
-		return 0;
-	}
-}
-
-static inline lrc_pid lrc_getParentPID() {
 	return getppid();
+#endif
 }
 
-static inline lrc_pid lrc_getPID() {
-	return getpid();
-}
 
-/* environmental variables */
-static inline void lrc_envVariableWrite(
-	const char* var_name, 
-	const char* str
-) {
+static inline void lrc_envVariableWrite(const char* var_name, const char* str) {
+#if defined(_WIN32)
+	SetEnvironmentVariableA(var_name, str);
+#elif defined(__linux__)
 	setenv(var_name, str, 1);
+#endif
 }
-// successful -> returns strlen
-// no variable -> returns 0
-// buffer too small -> returns requried buffersize
-static inline size_t lrc_envVariableRead(
-	const char* var_name, 
-	char* buffer, 
-	size_t buffer_size
-) {
+
+
+static inline size_t lrc_envVariableRead(const char* var_name, char* buffer, size_t buffer_size) {
+#if defined(_WIN32)
+	DWORD len = GetEnvironmentVariableA(var_name, buffer, buffer_size);
+	return len;
+#elif defined(__linux__)
 	const char* source = getenv(var_name);
 	if (source == NULL) return 0;
 	if (buffer_size == 0) return strlen(source) + 1;
@@ -182,9 +157,5 @@ static inline size_t lrc_envVariableRead(
 	}
 
 	return i;
-}
-
-#else
-	#error UNKOWN/MISSING_OS_SPECIFIER
 #endif
-
+}
