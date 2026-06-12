@@ -35,7 +35,7 @@ static inline void _lrc_safeStrcpy(char* buffer, const char* source, size_t len)
 	for (;i < len-1 && source[i] != '\0'; i++)
 		buffer[i] = source[i];
 
-	if (source[i] != 0)
+	if (source[i] != '\0')
 		printf("WARNING: lrc_sharedMemory.h, name too long\n");
 	
 	buffer[i] = '\0';

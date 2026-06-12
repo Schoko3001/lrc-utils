@@ -1,5 +1,6 @@
 #pragma once
 #include <stdio.h>
+#include <stdarg.h>
 
 #if defined(_WIN32)
 	#include <windows.h>
@@ -20,7 +21,6 @@
 #endif
 
 
-
 /* internal header function */
 static inline void _lrc_safeStrcpy(char* buffer, const char* source, size_t len) {
 	if (len == 0) return;
@@ -37,15 +37,62 @@ static inline void _lrc_safeStrcpy(char* buffer, const char* source, size_t len)
 
 
 
-static inline int lrc_processClone() {
-#if defined(_WIN32)
-	char path[MAX_PATH];
+static inline int lrc_processClone(bool inheritEnv, size_t count, ...) {
+	va_list args;
+	va_start(args, count);
 
+	// first arg varCount
+	size_t varCount = va_arg(args, size_t);
+
+
+
+#if defined(_WIN32)
+	void* env; 
+
+	if (count == 0) {
+		env = NULL;
+	} else {
+		LPCH win_env = GetEnvironmentStringsA();
+
+		// size of current environment
+		size_t size_c = 0;
+		while (win_env[size_c]) {
+			size_c += strlen(&win_env[size_c]) + 1;
+		}
+
+		// size of new stuff
+		int size_n;
+		va_list args;
+		va_start(args, count);
+		for (int i = 0; i < count; i++) {
+			size_n += strlen(va_arg(args, char*)) + 1; // var_name
+			size_n += strlen(va_arg(args, char*)) + 1; // var_value
+		}
+		va_end(args);
+
+		// new environment
+		char* buffer = malloc(size_c + size_n + 1);
+		for (int i = 0; i < size_c; i++) {
+			buffer[i] = win_env[i];
+		}
+		va_start(args, count);
+		for (int i = 0; i < count; i++) {
+			for (int j = 0)
+		}
+
+
+
+
+	}
+
+
+
+
+	char path[MAX_PATH];
 	GetModuleFileNameA(NULL, path, MAX_PATH);
 
 	STARTUPINFOA si = {0};
 	PROCESS_INFORMATION pi = {0};
-
 	si.cb = sizeof(si);
 
 	if (CreateProcessA(
@@ -54,7 +101,7 @@ static inline int lrc_processClone() {
 		NULL, NULL,
 		FALSE,
 		0,
-		NULL,
+		env,
 		NULL,
 		&si,
 		&pi)
@@ -128,6 +175,7 @@ static inline lrc_pid lrc_getParentPID() {
 }
 
 
+ 
 static inline void lrc_envVariableWrite(const char* var_name, const char* str) {
 #if defined(_WIN32)
 	SetEnvironmentVariableA(var_name, str);

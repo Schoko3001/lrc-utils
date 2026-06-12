@@ -1,14 +1,16 @@
 #pragma once
+// dynamic pointer based freelist
+
 #include <stdint.h>
 /* !!! IT IS ASSUMED THAT <stdlib> IS INCLUDED SOMEWHERE !!! */
 
 
 /* FUNCTIONS:
- *	void* freelist_create(size_t nmeb, size_t memb_size);
- *	void  freelist_destroy(void* list);
+ *	void* lrc_freelistdp_create(size_t nmeb, size_t memb_size);
+ *	void  lrc_freelistdp_destroy(void* list);
  *
- *	void* freelist_addSlot(void* list, size_t memb_size);
- *	void  freelist_freeSlot(void* list, void* slot_p) 
+ *	void* lrc_freelistdp_addSlot(void* list, size_t memb_size);
+ *	void  lrc_freelistdp_freeSlot(void* list, void* slot_p) 
  */
 
 
@@ -54,7 +56,7 @@ void free(void *ptr);
 
 
 // freelist descriptor
-struct _fl_desc{
+struct _fldp_desc{
 	void* free_head;
 	void* tailChunk;
 	size_t tailChunk_used;
@@ -73,8 +75,8 @@ struct _fl_desc{
  */
 
 // creates the dymamic freelist and returns its adress that is used for identification
-static inline void* freelist_create(size_t nmemb, size_t memb_size) {
-	struct _fl_desc* list = malloc(sizeof(struct _fl_desc));
+static inline void* lrc_freelistdp_create(size_t nmemb, size_t memb_size) {
+	struct _fldp_desc* list = malloc(sizeof(struct _fldp_desc));
 	list->stride = _FL_STRIDE(memb_size);
 
 	list->tailChunk_size = nmemb * list->stride + sizeof(char*);
@@ -88,9 +90,9 @@ static inline void* freelist_create(size_t nmemb, size_t memb_size) {
 
 	return list;
 }
-static inline void freelist_destroy(void* ptr) {
+static inline void lrc_freelistdp_destroy(void* ptr) {
 	if (ptr == NULL) return;
-	struct _fl_desc* list = ptr;
+	struct _fldp_desc* list = ptr;
 
 	while (list->tailChunk != NULL) {
 		void* tmp = *(void**)list->tailChunk;
@@ -103,8 +105,8 @@ static inline void freelist_destroy(void* ptr) {
 
 // returns void* to an unused slot
 // might be filled with garbage values
-static inline void* freelist_addSlot(void* ptr) {
-	struct _fl_desc* list = ptr;
+static inline void* lrc_freelistdp_addSlot(void* ptr) {
+	struct _fldp_desc* list = ptr;
 
 	if (list->free_head == NULL) {
 
@@ -130,8 +132,8 @@ static inline void* freelist_addSlot(void* ptr) {
 		return ret;
 	}
 }
-static inline void freelist_freeSlot(void* ptr, void* slot_p) {
-	struct _fl_desc* list = ptr;
+static inline void lrc_freelistdp_freeSlot(void* ptr, void* slot_p) {
+	struct _fldp_desc* list = ptr;
 	*(void**)slot_p = list->free_head;
 	list->free_head = slot_p;
 }
