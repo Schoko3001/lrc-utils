@@ -5,16 +5,15 @@
 /* !!! IT IS ASSUMED THAT <stdlib> IS INCLUDED SOMEWHERE !!! */
 
 
-/* FUNCTIONS:
+/** FUNCTIONS **
  *	void* lrc_freelistdp_create(size_t nmeb, size_t memb_size);
  *	void  lrc_freelistdp_destroy(void* list);
  *
  *	void* lrc_freelistdp_addSlot(void* list, size_t memb_size);
  *	void  lrc_freelistdp_freeSlot(void* list, void* slot_p) 
- */
+ **/
 
-
-/* INFORMATION:
+/** INFORMATION **
  *	This freelist grows dynamically
  *	This freelist does not shrink
  *
@@ -23,29 +22,40 @@
  *
  *	This freelist uses void* instead of an index
  *	-> the size of a slot is rounded up to a multiple of sizeof(void*)
- */
+ **/
+
+/** PERFORMANCE **
+ * 	Upsides:
+ *	-> O(1) allocation/deallocation
+ *	-> No realloc overhead
+ *
+ * 	Downsides:
+ * 	-> Cache fragmentation with log2(n) buffers
+ * 	-> destroy() has ~log2(n) pointer chaising
+ * 	-> no shrinking 
+ **/
 
 
 void* malloc(size_t size);
 void free(void *ptr);
 
-/* CUSTOMIZATION:
- *	_FL_NEW_CHUNK_SIZE(variable)
+/** CUSTOMIZATION **
+ *	_FLDP_NEW_CHUNK_SIZE(variable)
  *	-> transformation of buffer size for each new chunk
  *	!!! sizeof(void*) will be added to the true size !!!
  *
- *	_FL_CHUNK_MALLOC(size)
+ *	_FLDP_CHUNK_MALLOC(size)
  *	-> allocation method for memory
  *	- must return void*
-*/
+ **/
 
 
-#ifndef _FL_NEW_CHUNK_SIZE
-#define _FL_NEW_CHUNK_SIZE(variable) (variable) = (variable) << 1
+#ifndef _FLDP_NEW_CHUNK_SIZE
+#define _FLDP_NEW_CHUNK_SIZE(variable) (variable) = (variable) << 1
 #endif
 
-#ifndef _FL_CHUNK_MALLOC
-#define _FL_CHUNK_MALLOC(size) malloc((size))
+#ifndef _FLDP_CHUNK_MALLOC
+#define _FLDP_CHUNK_MALLOC(size) malloc((size))
 #endif
 
 
@@ -61,7 +71,6 @@ struct _fldp_desc{
 	void* tailChunk;
 	size_t tailChunk_used;
 	size_t tailChunk_size;
-	size_t stride;
 };
 
 /*  Datastructure:
@@ -76,10 +85,10 @@ struct _fldp_desc{
 
 // creates the dymamic freelist and returns its adress that is used for identification
 static inline void* lrc_freelistdp_create(size_t nmemb, size_t memb_size) {
+	const int stride = _FL_STRIDE(memb_size);
 	struct _fldp_desc* list = malloc(sizeof(struct _fldp_desc));
-	list->stride = _FL_STRIDE(memb_size);
 
-	list->tailChunk_size = nmemb * list->stride + sizeof(char*);
+	list->tailChunk_size = nmemb * stride + sizeof(char*);
 	list->tailChunk = malloc(list->tailChunk_size);
 
 	list->free_head = NULL;
@@ -105,7 +114,8 @@ static inline void lrc_freelistdp_destroy(void* ptr) {
 
 // returns void* to an unused slot
 // might be filled with garbage values
-static inline void* lrc_freelistdp_addSlot(void* ptr) {
+static inline void* lrc_freelistdp_addSlot(void* ptr, size_t memb_size) {
+	const int stride = _FL_STRIDE(memb_size);	
 	struct _fldp_desc* list = ptr;
 
 	if (list->free_head == NULL) {
@@ -113,17 +123,17 @@ static inline void* lrc_freelistdp_addSlot(void* ptr) {
 		/* create new chunk if current full */
 		if (list->tailChunk_used == list->tailChunk_size) {
 			list->tailChunk_size -= sizeof(void*);
-			_FL_NEW_CHUNK_SIZE(list->tailChunk_size);
+			_FLDP_NEW_CHUNK_SIZE(list->tailChunk_size);
 			list->tailChunk_size += sizeof(void*);
 
-			void* new_chunk = _FL_CHUNK_MALLOC(list->tailChunk_size);
+			void* new_chunk = _FLDP_CHUNK_MALLOC(list->tailChunk_size);
 			*(void**)new_chunk = list->tailChunk;
 			list->tailChunk = new_chunk; 
 			list->tailChunk_used = sizeof(void*);
 		}
 
 		void* ret = (char*)list->tailChunk + list->tailChunk_used;
-		list->tailChunk_used += list->stride;
+		list->tailChunk_used += stride;
 		return ret;
 	}
 	else {
