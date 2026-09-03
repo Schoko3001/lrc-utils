@@ -19,9 +19,8 @@
 #endif
 
 
-
-static inline void lrc_sleepWhile(_Atomic int* ptr, int expected) {
-	atomic_thread_fence(memory_order_seq_cst);
+// adress that is pointed to must be atomic int
+static inline void lrc_futex_sleepWhile(_Atomic int* ptr, int expected) {
 	do {
 #if defined(_WIN32)
 		WaitOnAddress(
@@ -41,13 +40,11 @@ static inline void lrc_sleepWhile(_Atomic int* ptr, int expected) {
 			0
 		);
 #endif
-	} while(atomic_load_explicit(ptr, memory_order_acquire) == expected);
-	atomic_thread_fence(memory_order_seq_cst);
+	} while (atomic_load_explicit(ptr, memory_order_acquire) == expected);
 }
 
-
-static inline void lrc_tryWakeup(_Atomic int* ptr) {
-	atomic_thread_fence(memory_order_seq_cst);
+// only use atomic functions to change *ptr
+static inline void lrc_futex_tryWakeAll(_Atomic int* ptr) {
 #if defined(_WIN32)
 	WakeByAddressAll(ptr);
 #elif defined(__linux__)
@@ -61,5 +58,21 @@ static inline void lrc_tryWakeup(_Atomic int* ptr) {
 		0,
 	);
 #endif
-	atomic_thread_fence(memory_order_seq_cst);
+}
+
+// only use atomic functions to change *ptr
+static inline void lrc_futex_tryWakeSingle(_Atomic int* ptr) {
+#if defined(_WIN32)
+	WakeByAddressSingle(ptr);
+#elif defined(__linux__)
+	syscall(
+		SYS_futex,
+		ptr,
+		FUTEX_WAKE,
+		1,
+		NULL,
+		NULL,
+		0,
+	);
+#endif
 }
